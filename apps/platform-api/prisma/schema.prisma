@@ -1,0 +1,313 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users & Identity ──
+
+model User {
+  id          String   @id @default(uuid())
+  keycloakId  String   @unique @map("keycloak_id")
+  username    String   @unique
+  email       String   @unique
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  displayName String   @map("display_name")
+  avatar      String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  groups         UserGroup[]
+  documents      Document[]
+  folders        Folder[]
+  notifications  Notification[]
+  auditEntries   AuditEntry[]
+  comments       Comment[]
+
+  @@map("users")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  parentId    String?  @map("parent_id")
+  parent      Group?   @relation("GroupHierarchy", fields: [parentId], references: [id])
+  children    Group[]  @relation("GroupHierarchy")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members     UserGroup[]
+
+  @@map("groups")
+}
+
+model UserGroup {
+  userId  String @map("user_id")
+  groupId String @map("group_id")
+  user    User   @relation(fields: [userId], references: [id])
+  group   Group  @relation(fields: [groupId], references: [id])
+
+  @@id([userId, groupId])
+  @@map("user_groups")
+}
+
+// ── Permissions / ACL ──
+
+model Permission {
+  id          String   @id @default(uuid())
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  subjectType String   @map("subject_type") // user | group | role
+  subjectId   String   @map("subject_id")
+  actions     String[] // read, write, delete, admin, publish
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([subjectType, subjectId])
+  @@map("permissions")
+}
+
+// ── Documents / ECM ──
+
+model Document {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  folderId    String?  @map("folder_id")
+  folder      Folder?  @relation(fields: [folderId], references: [id])
+  mimeType    String   @map("mime_type")
+  size        BigInt
+  version     Int      @default(1)
+  storageKey  String   @map("storage_key")
+  tags        String[]
+  publishedAt DateTime? @map("published_at")
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  metadata    DocumentMetadata[]
+  versions    DocumentVersion[]
+
+  @@index([folderId])
+  @@index([createdById])
+  @@map("documents")
+}
+
+model DocumentMetadata {
+  id         String   @id @default(uuid())
+  documentId String   @map("document_id")
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  key        String
+  value      String
+
+  @@unique([documentId, key])
+  @@map("document_metadata")
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String   @map("document_id")
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    Int
+  size       BigInt
+  storageKey String   @map("storage_key")
+  comment    String?
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([documentId, version])
+  @@map("document_versions")
+}
+
+model Folder {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  parentId    String?  @map("parent_id")
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children    Folder[] @relation("FolderHierarchy")
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  documents   Document[]
+
+  @@index([parentId])
+  @@map("folders")
+}
+
+// ── Process / Workflow Tracking ──
+
+model ProcessDefinition {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  category    String?
+  version     Int      @default(1)
+  formKey     String?  @map("form_key")
+  bpmnXml     String?  @map("bpmn_xml") @db.Text
+  deployed    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  requests    Request[]
+
+  @@map("process_definitions")
+}
+
+model Request {
+  id                   String   @id @default(uuid())
+  processInstanceId    String?  @map("process_instance_id")
+  processDefinitionId  String   @map("process_definition_id")
+  processDefinition    ProcessDefinition @relation(fields: [processDefinitionId], references: [id])
+  requestNumber        String   @unique @map("request_number")
+  title                String
+  description          String?
+  requesterId          String   @map("requester_id")
+  status               String   @default("draft") // draft, open, in_progress, completed, cancelled
+  currentStep          String?  @map("current_step")
+  formData             Json?    @map("form_data")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  completedAt          DateTime? @map("completed_at")
+
+  attachments          Attachment[]
+  comments             Comment[]
+  history              HistoryEntry[]
+
+  @@index([requesterId])
+  @@index([status])
+  @@map("requests")
+}
+
+model Attachment {
+  id         String   @id @default(uuid())
+  requestId  String?  @map("request_id")
+  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  name       String
+  mimeType   String   @map("mime_type")
+  size       BigInt
+  storageKey String   @map("storage_key")
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("attachments")
+}
+
+// ── Forms ──
+
+model FormDefinition {
+  id                   String   @id @default(uuid())
+  name                 String
+  processDefinitionKey String?  @map("process_definition_key")
+  version              Int      @default(1)
+  fields               Json
+  layout               Json?
+  createdBy            String   @map("created_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("form_definitions")
+}
+
+// ── Datasets ──
+
+model DatasetDefinition {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  sourceType  String   @map("source_type") // internal, rest, soap, sql, erp
+  config      Json
+  fields      Json
+  cacheTtl    Int?     @map("cache_ttl") // seconds
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("dataset_definitions")
+}
+
+// ── Notifications ──
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // task_assigned, task_completed, request_updated, etc.
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  readAt    DateTime? @map("read_at")
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ── Audit ──
+
+model AuditEntry {
+  id         String   @id @default(uuid())
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id])
+  userName   String   @map("user_name")
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  timestamp  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([timestamp])
+  @@map("audit_entries")
+}
+
+// ── Comments ──
+
+model Comment {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  requestId  String?  @map("request_id")
+  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  content    String   @db.Text
+  authorId   String   @map("author_id")
+  author     User     @relation(fields: [authorId], references: [id])
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime? @updatedAt @map("updated_at")
+
+  @@index([entityType, entityId])
+  @@map("comments")
+}
+
+// ── History ──
+
+model HistoryEntry {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  requestId  String?  @map("request_id")
+  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  action     String
+  fromStatus String?  @map("from_status")
+  toStatus   String?  @map("to_status")
+  userId     String   @map("user_id")
+  userName   String   @map("user_name")
+  details    Json?
+  timestamp  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("history_entries")
+}
