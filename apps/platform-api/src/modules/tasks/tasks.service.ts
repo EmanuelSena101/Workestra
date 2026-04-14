@@ -62,7 +62,11 @@ export class TasksService {
     return this.prisma.task.update({
       where: { id },
       data: {
-        ...data,
+        status: data.status,
+        assigneeId: data.assigneeId,
+        priority: data.priority,
+        currentStep: data.currentStep,
+        formData: data.formData as any ?? undefined,
         completedAt: data.status === 'completed' ? new Date() : undefined,
       },
     });

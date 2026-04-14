@@ -16,7 +16,7 @@ export class AdminController {
     return this.adminService.getDashboard();
   }
 
-  @Get('status')
+  @Get('system-status')
   @ApiOperation({ summary: 'Get system status' })
   async status() {
     return this.adminService.getSystemStatus();

@@ -26,7 +26,7 @@ export class AuthService {
     this.ldapSearchBase = this.configService.get<string>('LDAP_SEARCH_BASE');
   }
 
-  async login(username: string, password: string): Promise<{ token: string; user: Record<string, unknown> }> {
+  async login(username: string, password: string): Promise<{ access_token: string; user: Record<string, unknown> }> {
     // Try LDAP authentication first if configured
     if (this.ldapUrl) {
       return this.loginWithLdap(username, password);
@@ -62,9 +62,9 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const token = this.generateToken(user);
+    const access_token = this.generateToken(user);
     return {
-      token,
+      access_token,
       user: this.sanitizeUser(user),
     };
   }
@@ -143,8 +143,8 @@ export class AuthService {
         },
       });
 
-      const token = this.generateToken(user);
-      return { token, user: this.sanitizeUser(user) };
+      const access_token = this.generateToken(user);
+      return { access_token, user: this.sanitizeUser(user) };
     } catch (err) {
       if (err instanceof UnauthorizedException) throw err;
       this.logger.error(`LDAP error: ${(err as Error).message}`);
@@ -164,8 +164,8 @@ export class AuthService {
         displayName: `${data.firstName} ${data.lastName}`,
       },
     });
-    const token = this.generateToken(user);
-    return { token, user: this.sanitizeUser(user) };
+    const access_token = this.generateToken(user);
+    return { access_token, user: this.sanitizeUser(user) };
   }
 
   async validateToken(token: string) {

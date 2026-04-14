@@ -53,7 +53,6 @@ export class KanbanService {
         name: data.name,
         description: data.description,
         processDefinitionId: data.processDefinitionId,
-        createdById: userId,
       },
     });
 
@@ -74,7 +73,13 @@ export class KanbanService {
   }
 
   async updateBoard(id: string, data: { name?: string; description?: string }) {
-    return this.prisma.kanbanBoard.update({ where: { id }, data });
+    return this.prisma.kanbanBoard.update({
+      where: { id },
+      data: {
+        name: data.name,
+        description: data.description,
+      },
+    });
   }
 
   async deleteBoard(id: string) {
@@ -111,7 +116,7 @@ export class KanbanService {
 
   // ── Cards ──
 
-  async createCard(columnId: string, data: { title: string; description?: string; assigneeId?: string; priority?: string; dueDate?: string; taskId?: string; requestId?: string }, userId: string) {
+  async createCard(columnId: string, data: { title: string; description?: string; assigneeId?: string; priority?: string; dueDate?: string; requestId?: string }, userId: string) {
     const maxPos = await this.prisma.kanbanCard.aggregate({
       where: { columnId },
       _max: { position: true },
@@ -125,7 +130,6 @@ export class KanbanService {
         assigneeId: data.assigneeId,
         priority: data.priority || 'medium',
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        taskId: data.taskId,
         requestId: data.requestId,
         position: (maxPos._max.position ?? -1) + 1,
         createdById: userId,
