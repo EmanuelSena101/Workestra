@@ -1,18 +1,17 @@
 import type { Metadata } from 'next';
-import '@/styles/globals.css';
-import '@/styles/shell.css';
-import { ShellLayout } from '@/layouts/shell-layout';
+import '../styles/globals.css';
+import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: 'Workestra - Plataforma Corporativa',
-  description: 'Plataforma corporativa unificada para gestão de processos, documentos e tarefas.',
+  description: 'Plataforma corporativa unificada',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
       <body>
-        <ShellLayout>{children}</ShellLayout>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

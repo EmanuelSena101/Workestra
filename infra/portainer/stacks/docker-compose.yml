@@ -6,8 +6,6 @@ version: "3.8"
 
 # ── Networks ──
 networks:
-  edge:
-    driver: bridge
   app:
     driver: bridge
   data:
@@ -66,7 +64,7 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════
-  # 3. OpenSearch - Search & Indexing
+  # 3. OpenSearch - Search & Indexing (optional)
   # ═══════════════════════════════════════════
   opensearch:
     image: opensearchproject/opensearch:2.13.0
@@ -121,7 +119,7 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════
-  # 5. Apache Tika - Content Extraction
+  # 5. Apache Tika - Content Extraction (optional)
   # ═══════════════════════════════════════════
   tika:
     image: apache/tika:2.9.2
@@ -138,34 +136,7 @@ services:
       retries: 3
 
   # ═══════════════════════════════════════════
-  # 6. Keycloak - Identity & SSO
-  # ═══════════════════════════════════════════
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: workestra-keycloak
-    restart: unless-stopped
-    command: start-dev
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-keycloak}
-      KC_DB_USERNAME: ${POSTGRES_USER:-workestra}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-workestra_secret}
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"
-    ports:
-      - "8080:8080"
-    networks:
-      - app
-      - data
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # ═══════════════════════════════════════════
-  # 7. Zeebe - Workflow Engine (Camunda 8)
+  # 6. Zeebe - Workflow Engine (Camunda 8, optional)
   # ═══════════════════════════════════════════
   zeebe:
     image: camunda/zeebe:8.5.2
@@ -194,57 +165,7 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════
-  # 8. Operate - Process Monitoring (Camunda 8)
-  # ═══════════════════════════════════════════
-  operate:
-    image: camunda/operate:8.5.2
-    container_name: workestra-operate
-    restart: unless-stopped
-    environment:
-      - CAMUNDA_OPERATE_ZEEBE_GATEWAYADDRESS=zeebe:26500
-      - CAMUNDA_OPERATE_OPENSEARCH_URL=http://opensearch:9200
-      - CAMUNDA_OPERATE_ZEEBEOPSEARCH_URL=http://opensearch:9200
-      - CAMUNDA_OPERATE_OPENSEARCH_INDEXPREFIX=operate
-      - CAMUNDA_OPERATE_ZEEBEOPSEARCH_PREFIX=zeebe-record
-      - SERVER_PORT=8081
-    ports:
-      - "8081:8081"
-    networks:
-      - app
-      - data
-    depends_on:
-      zeebe:
-        condition: service_healthy
-      opensearch:
-        condition: service_healthy
-
-  # ═══════════════════════════════════════════
-  # 9. Tasklist - Task Management (Camunda 8)
-  # ═══════════════════════════════════════════
-  tasklist:
-    image: camunda/tasklist:8.5.2
-    container_name: workestra-tasklist
-    restart: unless-stopped
-    environment:
-      - CAMUNDA_TASKLIST_ZEEBE_GATEWAYADDRESS=zeebe:26500
-      - CAMUNDA_TASKLIST_OPENSEARCH_URL=http://opensearch:9200
-      - CAMUNDA_TASKLIST_ZEEBEOPSEARCH_URL=http://opensearch:9200
-      - CAMUNDA_TASKLIST_OPENSEARCH_INDEXPREFIX=tasklist
-      - CAMUNDA_TASKLIST_ZEEBEOPSEARCH_PREFIX=zeebe-record
-      - SERVER_PORT=8082
-    ports:
-      - "8082:8082"
-    networks:
-      - app
-      - data
-    depends_on:
-      zeebe:
-        condition: service_healthy
-      opensearch:
-        condition: service_healthy
-
-  # ═══════════════════════════════════════════
-  # 10. Platform API
+  # 7. Platform API
   # ═══════════════════════════════════════════
   platform-api:
     build:
@@ -257,18 +178,23 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-workestra}:${POSTGRES_PASSWORD:-workestra_secret}@postgres:5432/${POSTGRES_DB:-workestra}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
-      KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-workestra}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-workestra-portal}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret}
+      LDAP_URL: ${LDAP_URL:-}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_SEARCH_BASE: ${LDAP_SEARCH_BASE:-}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-workestra}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_secret_key}
       MINIO_BUCKET: ${MINIO_BUCKET:-workestra-documents}
+      MINIO_USE_SSL: "false"
       OPENSEARCH_URL: http://opensearch:9200
       TIKA_URL: http://tika:9998
       ZEEBE_ADDRESS: zeebe:26500
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@workestra.local}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -284,13 +210,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      keycloak:
-        condition: service_started
-      minio:
-        condition: service_started
 
   # ═══════════════════════════════════════════
-  # 11. Platform Worker
+  # 8. Platform Worker
   # ═══════════════════════════════════════════
   platform-worker:
     build:
@@ -323,7 +245,7 @@ services:
         condition: service_healthy
 
   # ═══════════════════════════════════════════
-  # 12. Portal Web
+  # 9. Portal Web
   # ═══════════════════════════════════════════
   portal-web:
     build:
@@ -333,39 +255,9 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:4000}
-      NEXT_PUBLIC_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
-      NEXT_PUBLIC_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-workestra}
-      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-workestra-portal}
     ports:
       - "3000:3000"
     networks:
       - app
-      - edge
     depends_on:
-      - platform-api
-
-  # ═══════════════════════════════════════════
-  # 13. Traefik - Reverse Proxy
-  # ═══════════════════════════════════════════
-  proxy:
-    image: traefik:v3.0
-    container_name: workestra-proxy
-    restart: unless-stopped
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8888:8080"  # Traefik dashboard
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - edge
-      - app
-    depends_on:
-      - portal-web
       - platform-api

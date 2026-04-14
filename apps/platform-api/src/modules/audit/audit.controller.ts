@@ -1,36 +1,28 @@
-import { Controller, Get, Query, Param } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Audit')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List audit log entries' })
+  @ApiOperation({ summary: 'List audit entries' })
   async findAll(
-    @Query('action') action?: string,
     @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
     @Query('userId') userId?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
-    return this.auditService.findAll({ action, entityType, userId, from, to, page, pageSize });
-  }
-
-  @Get('entity/:entityType/:entityId')
-  @ApiOperation({ summary: 'Get audit log for a specific entity' })
-  async findByEntity(@Param('entityType') entityType: string, @Param('entityId') entityId: string) {
-    return this.auditService.findByEntity(entityType, entityId);
-  }
-
-  @Get('user/:userId')
-  @ApiOperation({ summary: 'Get audit log for a specific user' })
-  async findByUser(@Param('userId') userId: string) {
-    return this.auditService.findByUser(userId);
+    return this.auditService.findAll({
+      entityType, entityId, userId,
+      page: page ? parseInt(page, 10) : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) : 20,
+    });
   }
 }
