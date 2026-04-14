@@ -11,23 +11,29 @@ datasource db {
 
 model User {
   id          String   @id @default(uuid())
-  keycloakId  String   @unique @map("keycloak_id")
+  ldapDn      String?  @unique @map("ldap_dn")
   username    String   @unique
   email       String   @unique
   firstName   String   @map("first_name")
   lastName    String   @map("last_name")
   displayName String   @map("display_name")
   avatar      String?
+  passwordHash String? @map("password_hash")
   active      Boolean  @default(true)
+  lastLoginAt DateTime? @map("last_login_at")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  groups         UserGroup[]
-  documents      Document[]
-  folders        Folder[]
-  notifications  Notification[]
-  auditEntries   AuditEntry[]
-  comments       Comment[]
+  groups            UserGroup[]
+  documents         Document[]
+  folders           Folder[]
+  notifications     Notification[]
+  auditEntries      AuditEntry[]
+  comments          Comment[]
+  pushSubscriptions PushSubscription[]
+  assignedCards     KanbanCard[]       @relation("CardAssignee")
+  createdCards      KanbanCard[]       @relation("CardCreator")
+  requestsCreated   Request[]
 
   @@map("users")
 }
@@ -36,6 +42,7 @@ model Group {
   id          String   @id @default(uuid())
   name        String   @unique
   description String?
+  ldapDn      String?  @unique @map("ldap_dn")
   parentId    String?  @map("parent_id")
   parent      Group?   @relation("GroupHierarchy", fields: [parentId], references: [id])
   children    Group[]  @relation("GroupHierarchy")
@@ -50,8 +57,8 @@ model Group {
 model UserGroup {
   userId  String @map("user_id")
   groupId String @map("group_id")
-  user    User   @relation(fields: [userId], references: [id])
-  group   Group  @relation(fields: [groupId], references: [id])
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@id([userId, groupId])
   @@map("user_groups")
@@ -86,6 +93,7 @@ model Document {
   version     Int      @default(1)
   storageKey  String   @map("storage_key")
   tags        String[]
+  extractedText String? @map("extracted_text") @db.Text
   publishedAt DateTime? @map("published_at")
   createdById String   @map("created_by_id")
   createdBy   User     @relation(fields: [createdById], references: [id])
@@ -118,6 +126,7 @@ model DocumentVersion {
   version    Int
   size       BigInt
   storageKey String   @map("storage_key")
+  mimeType   String   @map("mime_type") @default("application/octet-stream")
   comment    String?
   createdBy  String   @map("created_by")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -160,6 +169,7 @@ model ProcessDefinition {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   requests    Request[]
+  kanbanBoard KanbanBoard?
 
   @@map("process_definitions")
 }
@@ -173,7 +183,9 @@ model Request {
   title                String
   description          String?
   requesterId          String   @map("requester_id")
+  requester            User     @relation(fields: [requesterId], references: [id])
   status               String   @default("draft") // draft, open, in_progress, completed, cancelled
+  priority             String   @default("medium") // low, medium, high, critical
   currentStep          String?  @map("current_step")
   formData             Json?    @map("form_data")
   createdAt            DateTime @default(now()) @map("created_at")
@@ -203,6 +215,32 @@ model Attachment {
   @@map("attachments")
 }
 
+// ── Tasks (local tracking) ──
+
+model Task {
+  id                   String   @id @default(uuid())
+  externalId           String?  @unique @map("external_id") // Camunda task ID
+  title                String
+  description          String?
+  processName          String?  @map("process_name")
+  processDefinitionKey String?  @map("process_definition_key")
+  currentStep          String?  @map("current_step")
+  assigneeId           String?  @map("assignee_id")
+  status               String   @default("pending") // pending, in_progress, completed, overdue
+  priority             String   @default("medium") // low, medium, high, critical
+  slaPercentage        Int      @default(0) @map("sla_percentage")
+  dueDate              DateTime? @map("due_date")
+  completedAt          DateTime? @map("completed_at")
+  formData             Json?    @map("form_data")
+  requestId            String?  @map("request_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([assigneeId])
+  @@index([status])
+  @@map("tasks")
+}
+
 // ── Forms ──
 
 model FormDefinition {
@@ -229,6 +267,7 @@ model DatasetDefinition {
   config      Json
   fields      Json
   cacheTtl    Int?     @map("cache_ttl") // seconds
+  lastSyncAt  DateTime? @map("last_sync_at")
   createdBy   String   @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -240,18 +279,84 @@ model DatasetDefinition {
 
 model Notification {
   id        String   @id @default(uuid())
-  type      String   // task_assigned, task_completed, request_updated, etc.
+  type      String   // task_assigned, task_completed, request_updated, document_shared, system
   title     String
   message   String
   link      String?
   read      Boolean  @default(false)
   userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
   readAt    DateTime? @map("read_at")
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ── Push Subscriptions ──
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ── Kanban ──
+
+model KanbanBoard {
+  id                   String   @id @default(uuid())
+  name                 String
+  processDefinitionId  String?  @unique @map("process_definition_id")
+  processDefinition    ProcessDefinition? @relation(fields: [processDefinitionId], references: [id])
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  columns              KanbanColumn[]
+
+  @@map("kanban_boards")
+}
+
+model KanbanColumn {
+  id       String   @id @default(uuid())
+  boardId  String   @map("board_id")
+  board    KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  title    String
+  position Int
+  color    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cards    KanbanCard[]
+
+  @@index([boardId])
+  @@map("kanban_columns")
+}
+
+model KanbanCard {
+  id          String   @id @default(uuid())
+  columnId    String   @map("column_id")
+  column      KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  position    Int
+  priority    String   @default("medium") // low, medium, high, critical
+  assigneeId  String?  @map("assignee_id")
+  assignee    User?    @relation("CardAssignee", fields: [assigneeId], references: [id])
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation("CardCreator", fields: [createdById], references: [id])
+  requestId   String?  @map("request_id")
+  dueDate     DateTime? @map("due_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([columnId])
+  @@map("kanban_cards")
 }
 
 // ── Audit ──
@@ -310,4 +415,105 @@ model HistoryEntry {
 
   @@index([entityType, entityId])
   @@map("history_entries")
+}
+
+// ── Portals ──
+
+model Portal {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      String   @default("draft") // draft, published
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pages       PortalPage[]
+
+  @@map("portals")
+}
+
+model PortalPage {
+  id       String @id @default(uuid())
+  portalId String @map("portal_id")
+  portal   Portal @relation(fields: [portalId], references: [id], onDelete: Cascade)
+  title    String
+  slug     String
+  content  Json?
+  position Int    @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([portalId])
+  @@map("portal_pages")
+}
+
+// ── Communities ──
+
+model Community {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  memberCount Int      @default(0) @map("member_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  posts       CommunityPost[]
+
+  @@map("communities")
+}
+
+model CommunityPost {
+  id          String    @id @default(uuid())
+  communityId String    @map("community_id")
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  title       String
+  content     String    @db.Text
+  authorId    String    @map("author_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([communityId])
+  @@map("community_posts")
+}
+
+// ── Integration Config ──
+
+model IntegrationConfig {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        String   // rest, soap, sql, erp, webhook, mattermost, google_chat
+  config      Json
+  active      Boolean  @default(true)
+  lastTestedAt DateTime? @map("last_tested_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("integration_configs")
+}
+
+// ── Announcements ──
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String   @db.Text
+  type      String   @default("info") // info, warning, critical
+  active    Boolean  @default(true)
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("announcements")
+}
+
+// ── Favorites ──
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  entityType String   @map("entity_type") // process, document, folder, portal
+  entityId   String   @map("entity_id")
+  label      String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, entityType, entityId])
+  @@map("favorites")
 }

@@ -1,101 +1,58 @@
 'use client';
 
 import React from 'react';
-import { Users, Plus, MessageSquare, FileText, Calendar } from 'lucide-react';
+import useSWR from 'swr';
+import { AuthenticatedLayout } from '../../components/authenticated-layout';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/ui';
+import { fetcher } from '../../lib/api';
+import { Users, MessageSquare } from 'lucide-react';
 
-const communities = [
-  {
-    id: 'c1',
-    name: 'Tecnologia & Inovação',
-    description: 'Discussões sobre novas tecnologias, ferramentas e práticas de desenvolvimento.',
-    members: 45,
-    posts: 128,
-    lastActivity: '14/04/2024',
-  },
-  {
-    id: 'c2',
-    name: 'Gestão de Projetos',
-    description: 'Compartilhamento de metodologias, templates e boas práticas de gestão.',
-    members: 32,
-    posts: 87,
-    lastActivity: '13/04/2024',
-  },
-  {
-    id: 'c3',
-    name: 'Qualidade & Compliance',
-    description: 'Normas, auditorias, certificações e procedimentos de qualidade.',
-    members: 28,
-    posts: 56,
-    lastActivity: '12/04/2024',
-  },
-  {
-    id: 'c4',
-    name: 'Integração de Novos Colaboradores',
-    description: 'Espaço para novos membros da equipe tirarem dúvidas e se ambientarem.',
-    members: 15,
-    posts: 34,
-    lastActivity: '11/04/2024',
-  },
-];
+interface Community {
+  id: string;
+  name: string;
+  description?: string;
+  memberCount: number;
+  createdAt: string;
+}
+
+interface CommunitiesResponse {
+  items: Community[];
+  total: number;
+}
 
 export default function CommunitiesPage() {
-  return (
-    <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 className="page-header__title">Comunidades</h1>
-          <p className="page-header__subtitle">
-            Participe de comunidades internas para colaboração e troca de conhecimento.
-          </p>
-        </div>
-        <button className="topbar__new-request-btn">
-          <Plus size={16} />
-          Nova Comunidade
-        </button>
-      </div>
+  const { data, error, isLoading } = useSWR<CommunitiesResponse>('/admin/communities', fetcher);
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-        {communities.map((community) => (
-          <div className="card" key={community.id} style={{ cursor: 'pointer' }}>
-            <div className="card__body">
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 'var(--radius-lg)',
-                    background: 'rgba(0, 128, 208, 0.08)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-info)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Users size={22} />
+  return (
+    <AuthenticatedLayout>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-800">Comunidades</h1>
+          <p className="text-sm text-gray-500 mt-1">Espaços de colaboração da organização</p>
+        </div>
+
+        {isLoading && <LoadingSpinner message="Carregando comunidades..." />}
+        {error && <ErrorState message={error.message} />}
+
+        {data && data.items.length === 0 && (
+          <EmptyState icon={<Users size={48} />} title="Nenhuma comunidade criada" description="Comunidades são espaços de interação e colaboração" />
+        )}
+
+        {data && data.items.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.items.map((community) => (
+              <div key={community.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md cursor-pointer transition-all">
+                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center mb-3">
+                  <MessageSquare size={20} className="text-green-500" />
                 </div>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{community.name}</div>
-                </div>
+                <h3 className="text-sm font-semibold text-gray-800">{community.name}</h3>
+                {community.description && <p className="text-xs text-gray-500 mt-1">{community.description}</p>}
+                <p className="text-xs text-gray-400 mt-2">{community.memberCount} membros</p>
               </div>
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-                {community.description}
-              </p>
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Users size={13} /> {community.members} membros
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <MessageSquare size={13} /> {community.posts} posts
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Calendar size={13} /> {community.lastActivity}
-                </span>
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }

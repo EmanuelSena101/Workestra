@@ -1,56 +1,52 @@
-import { Controller, Get, Post, Delete, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkflowsService } from './workflows.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Workflows')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('workflows')
 export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 
-  @Get('definitions')
+  @Get()
   @ApiOperation({ summary: 'List process definitions' })
-  async findAllDefinitions(
-    @Query('category') category?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.workflowsService.findAllDefinitions({ category, page, pageSize });
+  async findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.workflowsService.findAll(
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+    );
   }
 
-  @Get('definitions/:id')
+  @Get('count')
+  @ApiOperation({ summary: 'Get process count' })
+  async count() {
+    const total = await this.workflowsService.count();
+    return { total };
+  }
+
+  @Get(':id')
   @ApiOperation({ summary: 'Get process definition by ID' })
-  async findDefinitionById(@Param('id') id: string) {
-    return this.workflowsService.findDefinitionById(id);
+  async findById(@Param('id') id: string) {
+    return this.workflowsService.findById(id);
   }
 
-  @Post('deploy')
-  @ApiOperation({ summary: 'Deploy BPMN workflow to Camunda' })
-  async deploy(@Body() body: { name: string; bpmnXml: string }) {
-    return this.workflowsService.deploy(body.name, body.bpmnXml);
+  @Post()
+  @ApiOperation({ summary: 'Create a process definition' })
+  async create(@Body() body: { key: string; name: string; description?: string; category?: string; formKey?: string; bpmnXml?: string }) {
+    return this.workflowsService.create(body);
   }
 
-  @Post('instances')
-  @ApiOperation({ summary: 'Start a new process instance' })
-  async startInstance(@Body() body: { processDefinitionKey: string; variables?: Record<string, unknown>; businessKey?: string }) {
-    return this.workflowsService.startInstance(body.processDefinitionKey, body.variables || {}, body.businessKey);
+  @Put(':id')
+  @ApiOperation({ summary: 'Update process definition' })
+  async update(@Param('id') id: string, @Body() body: { name?: string; description?: string; category?: string; deployed?: boolean }) {
+    return this.workflowsService.update(id, body);
   }
 
-  @Delete('instances/:key')
-  @ApiOperation({ summary: 'Cancel process instance' })
-  async cancelInstance(@Param('key') key: string) {
-    return this.workflowsService.cancelInstance(key);
-  }
-
-  @Get('instances/:key/timeline')
-  @ApiOperation({ summary: 'Get workflow instance timeline' })
-  async getInstanceTimeline(@Param('key') key: string) {
-    return this.workflowsService.getInstanceTimeline(key);
-  }
-
-  @Get('instances/:key/variables')
-  @ApiOperation({ summary: 'Get workflow instance variables' })
-  async getInstanceVariables(@Param('key') key: string) {
-    return this.workflowsService.getInstanceVariables(key);
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete process definition' })
+  async delete(@Param('id') id: string) {
+    return this.workflowsService.delete(id);
   }
 }

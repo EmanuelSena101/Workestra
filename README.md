@@ -10,22 +10,23 @@ Inspirada na proposta funcional do Fluig, com UX própria, operação self-hoste
 [Usuário]
    │
    ▼
-[Portal Web] ── Next.js (React)
+[Portal Web] ── Next.js 14 (React 18)
    │
    ▼
-[Platform API] ── NestJS
+[Platform API] ── NestJS 10 + Prisma
    │
-   ├──▶ [Camunda 8] ── Zeebe + Operate + Tasklist
-   ├──▶ [Keycloak] ── Identity & SSO
-   ├──▶ [MinIO] ── Object Storage
-   ├──▶ [PostgreSQL] ── Main Database
-   ├──▶ [OpenSearch] ── Full-text Search
+   ├──▶ [PostgreSQL] ── Main Database + Full-text Search
+   ├──▶ [LDAP] ── Authentication & User/Group Sync
+   ├──▶ [MinIO] ── Object Storage (Documents)
    ├──▶ [Tika] ── Content Extraction
+   ├──▶ [OpenSearch] ── Advanced Search (optional)
+   ├──▶ [Camunda 8] ── Zeebe Workflow Engine (optional)
+   ├──▶ [Web Push] ── VAPID Push Notifications
    └──▶ [SMTP] ── Email Notifications
 
 [Platform Worker] ── Background Jobs
    │
-   ├──▶ Notifications (email, SLA alerts)
+   ├──▶ Notifications (email, push, SLA alerts)
    ├──▶ Indexing (OpenSearch + Tika)
    ├──▶ Dataset Sync (REST, SQL, SOAP, ERP)
    ├──▶ Workflow Timers
@@ -37,7 +38,7 @@ Inspirada na proposta funcional do Fluig, com UX própria, operação self-hoste
 ```
 apps/
   portal-web/          # Next.js - Frontend corporativo
-  platform-api/        # NestJS - API principal
+  platform-api/        # NestJS - API principal (16 módulos)
   platform-worker/     # Node.js - Processamento assíncrono
 packages/
   ui-tokens/           # Design tokens e paleta visual
@@ -54,19 +55,18 @@ docs/                  # Documentação
 
 | Componente | Tecnologia |
 |---|---|
-| Frontend | Next.js 14 + React 18 |
-| Backend API | NestJS 10 |
-| Worker | Node.js |
+| Frontend | Next.js 14 + React 18 + SWR |
+| Backend API | NestJS 10 + Prisma ORM |
+| Worker | Node.js + Bull queues |
 | Database | PostgreSQL 16 |
-| Identity/SSO | Keycloak 24 |
-| Workflow Engine | Camunda 8 (Zeebe) |
+| Authentication | LDAP + JWT (bcryptjs) |
+| Workflow Engine | Camunda 8 / Zeebe (optional) |
 | Object Storage | MinIO |
-| Search | OpenSearch 2.13 |
+| Search | PostgreSQL full-text (+ OpenSearch optional) |
 | Content Extraction | Apache Tika |
 | Cache/Queue | Redis 7 |
-| ORM | Prisma |
+| Push Notifications | web-push (VAPID) |
 | Validation | Zod |
-| Reverse Proxy | Traefik v3 |
 
 ## Início Rápido
 
@@ -81,6 +81,15 @@ docs/                  # Documentação
 ```bash
 # Instalar dependências
 npm install
+
+# Configurar variáveis de ambiente
+cp .env.example .env.local
+
+# Gerar cliente Prisma e rodar migrations
+cd apps/platform-api
+npx prisma generate
+npx prisma db push
+cd ../..
 
 # Executar o portal web em modo dev
 npm run dev:portal
@@ -101,11 +110,18 @@ npm run lint
 npm run typecheck
 ```
 
+### Gerar VAPID keys (push notifications)
+
+```bash
+npx web-push generate-vapid-keys
+# Adicione VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY ao .env.local
+```
+
 ### Deploy com Docker (Portainer)
 
 ```bash
 # Copiar variáveis de ambiente
-cp infra/portainer/env/.env.example infra/portainer/stacks/.env
+cp .env.example infra/portainer/stacks/.env
 
 # Subir a stack
 cd infra/portainer/stacks
@@ -116,47 +132,50 @@ docker compose up -d
 
 1. PostgreSQL
 2. Redis
-3. OpenSearch
+3. OpenSearch (optional)
 4. MinIO
-5. Tika
-6. Keycloak
-7. Zeebe
-8. Operate + Tasklist
-9. Platform API
-10. Platform Worker
-11. Portal Web
-12. Traefik (Proxy)
+5. Tika (optional)
+6. Zeebe (optional)
+7. Platform API
+8. Platform Worker
+9. Portal Web
 
 ## Funcionalidades
 
 ### Portal Web
-- **Home** — Pendências, solicitações recentes, documentos, atalhos, favoritos, comunicados
-- **Central de Tarefas** — Inbox própria com filtros por status, prioridade e SLA
+- **Login** — Autenticação LDAP ou credenciais locais
+- **Home** — Dashboard com pendências, solicitações recentes, documentos, favoritos, comunicados
+- **Central de Tarefas** — Inbox com filtros por status, prioridade e SLA
 - **Solicitações** — Criar, acompanhar e gerenciar solicitações (workflows)
-- **Documentos** — Upload drag-and-drop, biblioteca, preview, versionamento, metadados
-- **Processos** — Definições de processos, instâncias ativas, indicadores
-- **Portais** — Páginas internas e widgets
-- **Comunidades** — Colaboração e troca de conhecimento
-- **Administração** — Usuários, permissões, datasets, notificações, auditoria
+- **Documentos** — Upload drag-and-drop, biblioteca (lista/grid), preview, versionamento, download
+- **Processos** — Definições de processos, instâncias ativas
+- **Kanban** — Quadros com colunas, cards, drag-and-drop, responsáveis
+- **Portais** — Páginas internas
+- **Comunidades** — Colaboração
+- **Busca Global** — Documentos, tarefas, solicitações, processos, usuários
+- **Administração** — Dashboard do sistema, status dos serviços, gestão de grupos/portais/comunidades
+- **Notificações** — Sino com contagem, push notifications via service worker
 
-### Platform API (Módulos)
-- `auth` — Autenticação via Keycloak OIDC
-- `users` — Gestão de usuários com sincronização Keycloak
+### Platform API (16 Módulos)
+- `auth` — Login LDAP + JWT, sessão, /me endpoint
+- `users` — Gestão de usuários com sincronização LDAP
+- `home` — Dashboard personalizado, favoritos
 - `permissions` — ACL e controle de acesso funcional
-- `tasks` — Central de tarefas (integração Camunda)
-- `requests` — Solicitações / workflow instances
-- `workflows` — Deploy e gestão de processos BPMN
-- `forms` — Formulários dinâmicos
-- `documents` — ECM/GED (MinIO + PostgreSQL + Tika)
-- `datasets` — Interface unificada de dados (REST, SQL, SOAP, ERP)
-- `integrations` — Integrações externas e webhooks
-- `notifications` — Notificações internas e e-mail
-- `search` — Busca global (OpenSearch)
+- `tasks` — Central de tarefas com filtros e SLA
+- `requests` — Solicitações com número sequencial e histórico
+- `workflows` — Definições de processos
+- `forms` — Formulários dinâmicos (campos JSON)
+- `documents` — ECM/GED (MinIO + PostgreSQL + Tika), upload, versionamento, preview, download
+- `datasets` — Interface unificada de dados (REST, SQL interno)
+- `integrations` — Integrações externas (Mattermost, Google Chat, webhooks)
+- `notifications` — Notificações + web-push (VAPID)
+- `search` — Busca global cross-entity
 - `audit` — Log de auditoria
-- `admin` — Administração funcional
+- `admin` — Dashboard administrativo, status do sistema, gestão de recursos
+- `kanban` — Quadros, colunas, cards com drag-and-drop
 
 ### Platform Worker (Jobs)
-- Envio de e-mails e notificações
+- Envio de e-mails e notificações push
 - Indexação de documentos (Tika + OpenSearch)
 - Sincronização de datasets
 - Timers de SLA e escalação
@@ -164,15 +183,30 @@ docker compose up -d
 
 ## Princípios
 
-1. O usuário final **não acessa** diretamente Camunda, Keycloak ou MinIO
-2. Toda a UX é entregue pelo **Portal Web próprio**
-3. A gestão funcional de acesso existe no sistema, não apenas no Keycloak
-4. O módulo de Datasets é uma **interface padronizada** de consulta de dados
-5. Documentos usam MinIO para binários, PostgreSQL para metadados/ACL, Tika para extração e OpenSearch para busca
+1. O usuário final **não acessa** diretamente Camunda ou MinIO — toda UX é entregue pelo Portal Web
+2. Autenticação via **LDAP + JWT** (sem dependência de Keycloak)
+3. O módulo de Datasets é uma **interface padronizada** de consulta de dados
+4. Documentos usam MinIO para binários, PostgreSQL para metadados/ACL, Tika para extração
+5. Push notifications reais via **VAPID/web-push** com service worker
+6. Todos os endpoints retornam dados reais do banco — **zero mocks, zero stubs**
 
 ## Variáveis de Ambiente
 
-Consulte `infra/portainer/env/.env.example` para a lista completa de variáveis configuráveis.
+Consulte `.env.example` para a lista completa de variáveis configuráveis.
+
+### Variáveis obrigatórias
+- `DATABASE_URL` — Conexão PostgreSQL
+- `REDIS_URL` — Conexão Redis
+- `JWT_SECRET` — Segredo para tokens JWT
+
+### Variáveis opcionais
+- `LDAP_URL`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_SEARCH_BASE` — Autenticação LDAP
+- `MINIO_*` — Armazenamento de documentos
+- `VAPID_*` — Push notifications
+- `TIKA_URL` — Extração de conteúdo
+- `OPENSEARCH_URL` — Busca avançada
+- `ZEEBE_ADDRESS` — Workflow engine
+- `SMTP_*` — Email
 
 ## Licença
 

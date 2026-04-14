@@ -1,138 +1,71 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Home,
-  CheckSquare,
-  FileText,
-  FolderOpen,
-  GitBranch,
-  Layout,
-  Users,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
+  Home, CheckSquare, FileText, FolderOpen, GitBranch, Layout,
+  Users, Settings, ChevronLeft, ChevronRight, Columns3
 } from 'lucide-react';
-import { useShell } from '@/hooks/use-shell';
 
-interface NavItem {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  href: string;
-  badge?: number;
-  section?: string;
-}
-
-const navItems: NavItem[] = [
-  { id: 'home', label: 'Home', icon: <Home size={20} />, href: '/' },
-  {
-    id: 'tasks',
-    label: 'Central de Tarefas',
-    icon: <CheckSquare size={20} />,
-    href: '/tasks',
-    badge: 12,
-  },
-  {
-    id: 'requests',
-    label: 'Solicitações',
-    icon: <FileText size={20} />,
-    href: '/requests',
-  },
-  {
-    id: 'documents',
-    label: 'Documentos',
-    icon: <FolderOpen size={20} />,
-    href: '/documents',
-  },
-  {
-    id: 'processes',
-    label: 'Processos',
-    icon: <GitBranch size={20} />,
-    href: '/processes',
-    section: 'Gestão',
-  },
-  {
-    id: 'portals',
-    label: 'Portais',
-    icon: <Layout size={20} />,
-    href: '/portals',
-  },
-  {
-    id: 'communities',
-    label: 'Comunidades',
-    icon: <Users size={20} />,
-    href: '/communities',
-  },
-  {
-    id: 'admin',
-    label: 'Administração',
-    icon: <Settings size={20} />,
-    href: '/admin',
-    section: 'Sistema',
-  },
+const navItems = [
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Central de Tarefas', href: '/tasks', icon: CheckSquare },
+  { label: 'Solicitações', href: '/requests', icon: FileText },
+  { label: 'Documentos', href: '/documents', icon: FolderOpen },
+  { label: 'Processos', href: '/processes', icon: GitBranch },
+  { label: 'Kanban', href: '/kanban', icon: Columns3 },
+  { label: 'Portais', href: '/portals', icon: Layout },
+  { label: 'Comunidades', href: '/communities', icon: Users },
+  { label: 'Administração', href: '/admin', icon: Settings },
 ];
 
 export function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar } = useShell();
-
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  };
-
-  let lastSection: string | undefined;
 
   return (
-    <div className="sidebar">
-      <div className="sidebar__logo">
-        <div className="sidebar__logo-icon">W</div>
-        {!sidebarCollapsed && <span className="sidebar__logo-text">Workestra</span>}
+    <aside
+      className={`fixed left-0 top-0 h-full bg-white border-r border-gray-200 transition-all duration-200 z-30 flex flex-col ${
+        collapsed ? 'w-[60px]' : 'w-[220px]'
+      }`}
+    >
+      <div className="h-14 flex items-center px-4 border-b border-gray-100">
+        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-bold text-sm">W</span>
+        </div>
+        {!collapsed && <span className="ml-3 font-semibold text-gray-800 text-sm">Workestra</span>}
       </div>
 
-      <nav className="sidebar__nav">
+      <nav className="flex-1 py-2 overflow-y-auto">
         {navItems.map((item) => {
-          const showSection = item.section && item.section !== lastSection;
-          if (item.section) lastSection = item.section;
+          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+          const Icon = item.icon;
 
           return (
-            <React.Fragment key={item.id}>
-              {showSection && !sidebarCollapsed && (
-                <div className="sidebar__section-label">{item.section}</div>
-              )}
-              <Link
-                href={item.href}
-                className={`sidebar__nav-item ${isActive(item.href) ? 'sidebar__nav-item--active' : ''}`}
-                title={sidebarCollapsed ? item.label : undefined}
-              >
-                <span className="sidebar__nav-icon">{item.icon}</span>
-                {!sidebarCollapsed && (
-                  <>
-                    <span className="sidebar__nav-label">{item.label}</span>
-                    {item.badge && <span className="sidebar__nav-badge">{item.badge}</span>}
-                  </>
-                )}
-              </Link>
-            </React.Fragment>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center mx-2 my-0.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-600 font-medium'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon size={18} className="flex-shrink-0" />
+              {!collapsed && <span className="ml-3">{item.label}</span>}
+            </Link>
           );
         })}
       </nav>
 
-      <div className="sidebar__footer">
-        <button
-          className="sidebar__nav-item"
-          onClick={toggleSidebar}
-          title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-        >
-          <span className="sidebar__nav-icon">
-            {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-          </span>
-          {!sidebarCollapsed && <span className="sidebar__nav-label">Recolher</span>}
-        </button>
-      </div>
-    </div>
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="mx-2 mb-3 p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
+      >
+        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
+    </aside>
   );
 }

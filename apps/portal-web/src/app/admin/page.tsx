@@ -1,191 +1,111 @@
 'use client';
 
-import React, { useState } from 'react';
-import {
-  Settings,
-  Users,
-  Shield,
-  Database,
-  Bell,
-  Globe,
-  GitBranch,
-  Key,
-  Mail,
-  Server,
-  Activity,
-  FileText,
-  ChevronRight,
-} from 'lucide-react';
+import React from 'react';
+import useSWR from 'swr';
+import { AuthenticatedLayout } from '../../components/authenticated-layout';
+import { LoadingSpinner, ErrorState, StatCard, Badge } from '../../components/ui';
+import { fetcher } from '../../lib/api';
+import { Users, FileText, FolderOpen, CheckSquare, GitBranch, Bell, Shield, Layout, MessageSquare, Activity } from 'lucide-react';
 
-const adminSections = [
-  {
-    id: 'users',
-    title: 'Usuários',
-    description: 'Gerenciar usuários, papéis e permissões da plataforma.',
-    icon: <Users size={24} />,
-    items: [
-      { label: 'Usuários', count: 156 },
-      { label: 'Grupos', count: 12 },
-      { label: 'Papéis', count: 8 },
-    ],
-  },
-  {
-    id: 'permissions',
-    title: 'Permissões',
-    description: 'Configurar políticas de acesso e controle funcional.',
-    icon: <Shield size={24} />,
-    items: [
-      { label: 'Políticas de Acesso', count: 15 },
-      { label: 'Perfis Funcionais', count: 6 },
-    ],
-  },
-  {
-    id: 'workflows',
-    title: 'Processos & Workflows',
-    description: 'Administrar definições de processos e deploy de workflows.',
-    icon: <GitBranch size={24} />,
-    items: [
-      { label: 'Processos Ativos', count: 5 },
-      { label: 'Rascunhos', count: 1 },
-    ],
-  },
-  {
-    id: 'datasets',
-    title: 'Datasets & Integrações',
-    description: 'Configurar fontes de dados, integrações REST/SOAP/SQL e ERPs.',
-    icon: <Database size={24} />,
-    items: [
-      { label: 'Datasets', count: 14 },
-      { label: 'Integrações', count: 5 },
-      { label: 'Conexões', count: 3 },
-    ],
-  },
-  {
-    id: 'notifications',
-    title: 'Notificações',
-    description: 'Configurar regras de notificação, templates de e-mail e alertas.',
-    icon: <Bell size={24} />,
-    items: [
-      { label: 'Templates', count: 12 },
-      { label: 'Regras', count: 8 },
-    ],
-  },
-  {
-    id: 'identity',
-    title: 'Identidade & SSO',
-    description: 'Configurações de autenticação, Keycloak e provedores externos.',
-    icon: <Key size={24} />,
-    items: [
-      { label: 'Realm', count: 1 },
-      { label: 'Provedores', count: 2 },
-    ],
-  },
-  {
-    id: 'email',
-    title: 'E-mail',
-    description: 'Configurar servidor SMTP, templates e filas de envio.',
-    icon: <Mail size={24} />,
-    items: [
-      { label: 'Servidores SMTP', count: 1 },
-      { label: 'Templates', count: 12 },
-    ],
-  },
-  {
-    id: 'storage',
-    title: 'Armazenamento',
-    description: 'Gerenciar storage, buckets e políticas de retenção.',
-    icon: <Server size={24} />,
-    items: [
-      { label: 'Buckets', count: 3 },
-      { label: 'Uso Total', count: '12.4 GB' as unknown as number },
-    ],
-  },
-  {
-    id: 'audit',
-    title: 'Auditoria',
-    description: 'Consultar logs de auditoria e histórico de ações.',
-    icon: <Activity size={24} />,
-    items: [
-      { label: 'Registros (30d)', count: 4521 },
-    ],
-  },
-  {
-    id: 'forms',
-    title: 'Formulários',
-    description: 'Gerenciar definições de formulários e campos dinâmicos.',
-    icon: <FileText size={24} />,
-    items: [
-      { label: 'Formulários', count: 18 },
-      { label: 'Campos Custom', count: 42 },
-    ],
-  },
-];
+interface DashboardSection {
+  label: string;
+  count: number;
+}
+
+interface SystemService {
+  name: string;
+  status: string;
+  message?: string;
+}
+
+interface AdminDashboard {
+  sections: DashboardSection[];
+}
+
+interface SystemStatus {
+  status: string;
+  services: SystemService[];
+}
 
 export default function AdminPage() {
-  return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Administração</h1>
-        <p className="page-header__subtitle">
-          Configurações gerais da plataforma, usuários, integrações e segurança.
-        </p>
-      </div>
+  const { data: dashboard, error: dashError, isLoading: dashLoading } = useSWR<AdminDashboard>('/admin/dashboard', fetcher);
+  const { data: systemStatus, error: sysError, isLoading: sysLoading } = useSWR<SystemStatus>('/admin/system-status', fetcher);
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
-        {adminSections.map((section) => (
-          <div className="card" key={section.id} style={{ cursor: 'pointer' }}>
-            <div className="card__body">
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 'var(--radius-lg)',
-                    background: 'rgba(0, 128, 208, 0.08)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-info)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {section.icon}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                      {section.title}
-                    </div>
-                    <ChevronRight size={18} style={{ color: 'var(--color-text-muted)' }} />
-                  </div>
-                  <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-                    {section.description}
-                  </p>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    {section.items.map((item) => (
-                      <div
-                        key={item.label}
-                        style={{
-                          padding: '4px 10px',
-                          background: 'var(--color-surface-alt)',
-                          borderRadius: 'var(--radius-md)',
-                          fontSize: 12,
-                          color: 'var(--color-text-muted)',
-                        }}
-                      >
-                        <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                          {item.count}
-                        </span>{' '}
-                        {item.label}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+  const iconMap: Record<string, React.ReactNode> = {
+    users: <Users size={20} color="#0080d0" />,
+    groups: <Shield size={20} color="#7c3aed" />,
+    documents: <FolderOpen size={20} color="#059669" />,
+    tasks: <CheckSquare size={20} color="#d97706" />,
+    requests: <FileText size={20} color="#dc2626" />,
+    processes: <GitBranch size={20} color="#0891b2" />,
+    portals: <Layout size={20} color="#4f46e5" />,
+    communities: <MessageSquare size={20} color="#16a34a" />,
+    notifications: <Bell size={20} color="#ea580c" />,
+    audit: <Activity size={20} color="#64748b" />,
+  };
+
+  return (
+    <AuthenticatedLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-800">Administração</h1>
+          <p className="text-sm text-gray-500 mt-1">Visão geral do sistema e gerenciamento</p>
+        </div>
+
+        {/* Dashboard Stats */}
+        {dashLoading && <LoadingSpinner message="Carregando painel..." />}
+        {dashError && <ErrorState message={dashError.message} />}
+
+        {dashboard && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {dashboard.sections.map((section) => (
+              <StatCard
+                key={section.label}
+                label={section.label.charAt(0).toUpperCase() + section.label.slice(1)}
+                value={section.count}
+                icon={iconMap[section.label] || <Activity size={20} color="#0080d0" />}
+              />
+            ))}
           </div>
-        ))}
+        )}
+
+        {/* System Status */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-800">Status do Sistema</h2>
+          </div>
+
+          {sysLoading && <LoadingSpinner size="sm" message="Verificando serviços..." />}
+          {sysError && <ErrorState message={sysError.message} />}
+
+          {systemStatus && (
+            <div className="divide-y divide-gray-50">
+              {systemStatus.services.map((service) => (
+                <div key={service.name} className="px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${
+                      service.status === 'connected' ? 'bg-green-500' :
+                      service.status === 'not_configured' ? 'bg-yellow-500' :
+                      'bg-red-500'
+                    }`} />
+                    <span className="text-sm text-gray-800">{service.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={
+                      service.status === 'connected' ? 'success' :
+                      service.status === 'not_configured' ? 'warning' : 'danger'
+                    }>
+                      {service.status === 'connected' ? 'Conectado' :
+                       service.status === 'not_configured' ? 'Não configurado' : 'Desconectado'}
+                    </Badge>
+                    {service.message && <span className="text-xs text-gray-400">{service.message}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }

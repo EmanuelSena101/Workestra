@@ -1,227 +1,144 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  FileText,
-  Plus,
-  Search,
-  ChevronRight,
-  Calendar,
-  User,
-  Clock,
-} from 'lucide-react';
+import useSWR from 'swr';
+import { useRouter } from 'next/navigation';
+import { AuthenticatedLayout } from '../../components/authenticated-layout';
+import { LoadingSpinner, ErrorState, EmptyState, Badge } from '../../components/ui';
+import { fetcher } from '../../lib/api';
+import { Search, FileText } from 'lucide-react';
 
-const requests = [
-  {
-    id: 'SOL-2024-1234',
-    title: 'Compra de equipamentos TI',
-    process: 'Aprovação de Compras',
-    requester: 'Maria Santos',
-    status: 'in_progress' as const,
-    currentStep: 'Aprovação Diretoria',
-    createdAt: '14/04/2024 10:30',
-    updatedAt: '14/04/2024 11:00',
-  },
-  {
-    id: 'SOL-2024-1233',
-    title: 'Solicitação de acesso VPN',
-    process: 'Gestão de Acessos',
-    requester: 'Carlos Oliveira',
-    status: 'completed' as const,
-    currentStep: 'Finalizado',
-    createdAt: '13/04/2024 14:20',
-    updatedAt: '14/04/2024 09:00',
-  },
-  {
-    id: 'SOL-2024-1232',
-    title: 'Reserva de sala de reunião - Auditório',
-    process: 'Reserva de Espaços',
-    requester: 'Ana Pereira',
-    status: 'pending' as const,
-    currentStep: 'Aguardando Aprovação',
-    createdAt: '13/04/2024 09:15',
-    updatedAt: '13/04/2024 09:15',
-  },
-  {
-    id: 'SOL-2024-1231',
-    title: 'Reembolso de despesas de viagem',
-    process: 'Reembolso de Despesas',
-    requester: 'Pedro Almeida',
-    status: 'in_progress' as const,
-    currentStep: 'Análise Financeira',
-    createdAt: '12/04/2024 16:45',
-    updatedAt: '13/04/2024 14:00',
-  },
-  {
-    id: 'SOL-2024-1230',
-    title: 'Cadastro de novo fornecedor - XYZ Corp',
-    process: 'Cadastro de Fornecedores',
-    requester: 'Lucia Ferreira',
-    status: 'in_progress' as const,
-    currentStep: 'Validação Documental',
-    createdAt: '12/04/2024 11:00',
-    updatedAt: '13/04/2024 16:30',
-  },
-  {
-    id: 'SOL-2024-1229',
-    title: 'Solicitação de férias - Maio 2024',
-    process: 'Gestão de Férias',
-    requester: 'Roberto Lima',
-    status: 'cancelled' as const,
-    currentStep: 'Cancelado pelo solicitante',
-    createdAt: '11/04/2024 08:30',
-    updatedAt: '12/04/2024 10:00',
-  },
-  {
-    id: 'SOL-2024-1228',
-    title: 'Contratação de serviço de consultoria',
-    process: 'Gestão Contratual',
-    requester: 'Fernanda Costa',
-    status: 'completed' as const,
-    currentStep: 'Finalizado',
-    createdAt: '10/04/2024 09:00',
-    updatedAt: '13/04/2024 17:00',
-  },
+interface Request {
+  id: string;
+  requestNumber: string;
+  title: string;
+  status: string;
+  priority: string;
+  createdAt: string;
+  requester?: { displayName: string };
+  processDefinition?: { name: string };
+}
+
+interface RequestsResponse {
+  items: Request[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+const statusTabs = [
+  { key: '', label: 'Todas' },
+  { key: 'open', label: 'Abertas' },
+  { key: 'in_progress', label: 'Em andamento' },
+  { key: 'pending', label: 'Pendentes' },
+  { key: 'completed', label: 'Concluídas' },
 ];
 
-const statusLabels: Record<string, string> = {
-  draft: 'Rascunho',
-  open: 'Aberta',
-  pending: 'Pendente',
-  in_progress: 'Em andamento',
-  completed: 'Concluída',
-  cancelled: 'Cancelada',
-};
-
 export default function RequestsPage() {
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
 
-  const filteredRequests = requests.filter((req) => {
-    if (statusFilter !== 'all' && req.status !== statusFilter) return false;
-    if (
-      searchQuery &&
-      !req.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !req.id.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-      return false;
-    return true;
-  });
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (status) params.set('status', status);
+  params.set('page', String(page));
+
+  const { data, error, isLoading } = useSWR<RequestsResponse>(`/requests?${params.toString()}`, fetcher);
+
+  const statusColors: Record<string, 'default' | 'info' | 'warning' | 'success' | 'danger'> = {
+    open: 'info',
+    in_progress: 'warning',
+    pending: 'default',
+    completed: 'success',
+    rejected: 'danger',
+    cancelled: 'danger',
+  };
 
   return (
-    <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <AuthenticatedLayout>
+      <div className="space-y-4">
         <div>
-          <h1 className="page-header__title">Solicitações</h1>
-          <p className="page-header__subtitle">
-            Acompanhe suas solicitações e inicie novos pedidos.
-          </p>
+          <h1 className="text-xl font-semibold text-gray-800">Solicitações</h1>
+          <p className="text-sm text-gray-500 mt-1">Acompanhe e gerencie suas solicitações</p>
         </div>
-        <button className="topbar__new-request-btn">
-          <Plus size={16} />
-          Nova Solicitação
-        </button>
-      </div>
 
-      {/* Tabs */}
-      <div className="tabs">
-        <button
-          className={`tab ${statusFilter === 'all' ? 'tab--active' : ''}`}
-          onClick={() => setStatusFilter('all')}
-        >
-          Todas ({requests.length})
-        </button>
-        <button
-          className={`tab ${statusFilter === 'in_progress' ? 'tab--active' : ''}`}
-          onClick={() => setStatusFilter('in_progress')}
-        >
-          Em andamento ({requests.filter((r) => r.status === 'in_progress').length})
-        </button>
-        <button
-          className={`tab ${statusFilter === 'pending' ? 'tab--active' : ''}`}
-          onClick={() => setStatusFilter('pending')}
-        >
-          Pendentes ({requests.filter((r) => r.status === 'pending').length})
-        </button>
-        <button
-          className={`tab ${statusFilter === 'completed' ? 'tab--active' : ''}`}
-          onClick={() => setStatusFilter('completed')}
-        >
-          Concluídas ({requests.filter((r) => r.status === 'completed').length})
-        </button>
-      </div>
+        {/* Status Tabs */}
+        <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-200 w-fit">
+          {statusTabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => { setStatus(tab.key); setPage(1); }}
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+                status === tab.key ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-      {/* Search */}
-      <div className="filters-bar">
-        <div style={{ position: 'relative' }}>
-          <Search
-            size={14}
-            style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }}
-          />
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            className="filter-search"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar solicitações..."
-            style={{ paddingLeft: 32 }}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-      </div>
 
-      {/* Request Cards */}
-      <div className="card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Solicitação</th>
-              <th>Processo</th>
-              <th>Solicitante</th>
-              <th>Etapa Atual</th>
-              <th>Status</th>
-              <th>Data</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRequests.map((req) => (
-              <tr key={req.id} style={{ cursor: 'pointer' }}>
-                <td>
-                  <div style={{ fontWeight: 500 }}>{req.title}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    {req.id}
-                  </div>
-                </td>
-                <td style={{ fontSize: 13 }}>{req.process}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                    <User size={14} />
-                    {req.requester}
-                  </div>
-                </td>
-                <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                  {req.currentStep}
-                </td>
-                <td>
-                  <span className={`badge badge--${req.status}`}>
-                    {statusLabels[req.status]}
-                  </span>
-                </td>
-                <td>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Calendar size={12} /> {req.createdAt}
+        {isLoading && <LoadingSpinner message="Carregando solicitações..." />}
+        {error && <ErrorState message={error.message} />}
+
+        {data && data.items.length === 0 && (
+          <EmptyState
+            icon={<FileText size={48} />}
+            title="Nenhuma solicitação encontrada"
+            description={search || status ? 'Tente ajustar os filtros' : 'Crie uma nova solicitação para começar'}
+          />
+        )}
+
+        {data && data.items.length > 0 && (
+          <div className="space-y-3">
+            {data.items.map((req) => (
+              <div
+                key={req.id}
+                onClick={() => router.push(`/requests/${req.id}`)}
+                className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-gray-200 cursor-pointer transition-all"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-gray-400">{req.requestNumber}</span>
+                      <Badge variant={statusColors[req.status] || 'default'}>{req.status}</Badge>
                     </div>
+                    <h3 className="text-sm font-medium text-gray-800 mt-1">{req.title}</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {req.processDefinition?.name || 'Processo'} · {req.requester?.displayName || 'Usuário'}
+                    </p>
                   </div>
-                </td>
-                <td>
-                  <ChevronRight size={16} style={{ color: 'var(--color-text-muted)' }} />
-                </td>
-              </tr>
+                  <span className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('pt-BR')}</span>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+
+            {data.totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-gray-500">{data.total} solicitações</p>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="px-3 py-1 text-sm border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Anterior</button>
+                  <span className="px-3 py-1 text-sm text-gray-600">{page} / {data.totalPages}</span>
+                  <button onClick={() => setPage(Math.min(data.totalPages, page + 1))} disabled={page === data.totalPages} className="px-3 py-1 text-sm border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Próximo</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }

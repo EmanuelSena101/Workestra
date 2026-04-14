@@ -1,29 +1,34 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AuditService {
-  async log(entry: {
-    action: string;
-    entityType: string;
-    entityId: string;
-    userId: string;
-    userName: string;
-    details?: Record<string, unknown>;
-    ipAddress?: string;
-  }) {
-    // TODO: Persist audit entry to PostgreSQL
-    return { id: '', logged: true };
+  constructor(private prisma: PrismaService) {}
+
+  async log(data: { action: string; entityType: string; entityId: string; userId: string; userName: string; details?: Record<string, unknown>; ipAddress?: string }) {
+    return this.prisma.auditEntry.create({ data });
   }
 
-  async findAll(filters: Record<string, unknown> = {}) {
-    return { data: [], total: 0, page: 1, pageSize: 50, totalPages: 0 };
-  }
+  async findAll(filters: { entityType?: string; entityId?: string; userId?: string; page?: number; pageSize?: number }) {
+    const { entityType, entityId, userId, page = 1, pageSize = 20 } = filters;
+    const skip = (page - 1) * pageSize;
+    const where: Record<string, unknown> = {};
 
-  async findByEntity(entityType: string, entityId: string) {
-    return [];
-  }
+    if (entityType) where['entityType'] = entityType;
+    if (entityId) where['entityId'] = entityId;
+    if (userId) where['userId'] = userId;
 
-  async findByUser(userId: string, filters: Record<string, unknown> = {}) {
-    return { data: [], total: 0 };
+    const [items, total] = await Promise.all([
+      this.prisma.auditEntry.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { timestamp: 'desc' },
+        include: { user: { select: { id: true, displayName: true } } },
+      }),
+      this.prisma.auditEntry.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 }

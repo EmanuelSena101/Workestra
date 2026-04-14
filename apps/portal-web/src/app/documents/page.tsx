@@ -1,324 +1,244 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import {
-  FolderOpen,
-  File,
-  FileText,
-  Image,
-  Upload,
-  Search,
-  Grid,
-  List,
-  MoreVertical,
-  Download,
-  Eye,
-  Trash2,
-  ChevronRight,
-  Folder,
-  Plus,
-} from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import useSWR from 'swr';
+import { useRouter } from 'next/navigation';
+import { AuthenticatedLayout } from '../../components/authenticated-layout';
+import { LoadingSpinner, ErrorState, EmptyState, Badge } from '../../components/ui';
+import { fetcher, api } from '../../lib/api';
+import { Search, Upload, FolderOpen, File, Grid, List, Download, Eye, MoreVertical } from 'lucide-react';
+import toast from 'react-hot-toast';
 
-interface DocItem {
+interface Document {
   id: string;
   name: string;
-  type: 'folder' | 'pdf' | 'docx' | 'xlsx' | 'image' | 'other';
-  size?: string;
-  version?: number;
-  modifiedBy?: string;
-  modifiedAt: string;
-  items?: number;
+  mimeType: string;
+  size: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: { displayName: string };
+  currentVersion: number;
 }
 
-const documents: DocItem[] = [
-  {
-    id: 'f1',
-    name: 'Políticas e Normas',
-    type: 'folder',
-    modifiedAt: '14/04/2024',
-    items: 23,
-  },
-  {
-    id: 'f2',
-    name: 'Manuais e Procedimentos',
-    type: 'folder',
-    modifiedAt: '13/04/2024',
-    items: 45,
-  },
-  {
-    id: 'f3',
-    name: 'Contratos',
-    type: 'folder',
-    modifiedAt: '12/04/2024',
-    items: 18,
-  },
-  {
-    id: 'f4',
-    name: 'Relatórios',
-    type: 'folder',
-    modifiedAt: '14/04/2024',
-    items: 56,
-  },
-  {
-    id: 'd1',
-    name: 'Relatório Financeiro Q1 2024.pdf',
-    type: 'pdf',
-    size: '2.4 MB',
-    version: 3,
-    modifiedBy: 'Maria Santos',
-    modifiedAt: '14/04/2024 09:00',
-  },
-  {
-    id: 'd2',
-    name: 'Manual de Procedimentos v5.docx',
-    type: 'docx',
-    size: '1.1 MB',
-    version: 5,
-    modifiedBy: 'Carlos Oliveira',
-    modifiedAt: '13/04/2024 11:30',
-  },
-  {
-    id: 'd3',
-    name: 'Planilha de Custos 2024.xlsx',
-    type: 'xlsx',
-    size: '856 KB',
-    version: 2,
-    modifiedBy: 'Ana Pereira',
-    modifiedAt: '12/04/2024 15:00',
-  },
-  {
-    id: 'd4',
-    name: 'Apresentação Resultados.pdf',
-    type: 'pdf',
-    size: '5.2 MB',
-    version: 1,
-    modifiedBy: 'Pedro Almeida',
-    modifiedAt: '11/04/2024 16:00',
-  },
-  {
-    id: 'd5',
-    name: 'Organograma Atualizado.png',
-    type: 'image',
-    size: '340 KB',
-    version: 4,
-    modifiedBy: 'Lucia Ferreira',
-    modifiedAt: '10/04/2024 10:00',
-  },
-  {
-    id: 'd6',
-    name: 'Contrato Prestação Serviços - XYZ.pdf',
-    type: 'pdf',
-    size: '1.8 MB',
-    version: 1,
-    modifiedBy: 'Fernanda Costa',
-    modifiedAt: '09/04/2024 14:30',
-  },
-];
+interface DocsResponse {
+  items: Document[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
 
-function getFileIcon(type: string) {
-  switch (type) {
-    case 'folder':
-      return <Folder size={20} style={{ color: 'var(--color-warning)' }} />;
-    case 'pdf':
-      return <FileText size={20} style={{ color: '#e74c3c' }} />;
-    case 'docx':
-      return <FileText size={20} style={{ color: '#2980b9' }} />;
-    case 'xlsx':
-      return <FileText size={20} style={{ color: '#27ae60' }} />;
-    case 'image':
-      return <Image size={20} style={{ color: '#8e44ad' }} />;
-    default:
-      return <File size={20} style={{ color: 'var(--color-text-muted)' }} />;
-  }
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getFileIcon(mimeType: string): string {
+  if (mimeType?.startsWith('image/')) return '🖼️';
+  if (mimeType?.includes('pdf')) return '📄';
+  if (mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) return '📊';
+  if (mimeType?.includes('document') || mimeType?.includes('word')) return '📝';
+  if (mimeType?.includes('text')) return '📃';
+  return '📎';
 }
 
 export default function DocumentsPage() {
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredDocs = documents.filter((doc) => {
-    if (searchQuery && !doc.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  params.set('page', String(page));
 
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
+  const { data, error, isLoading, mutate } = useSWR<DocsResponse>(`/documents?${params.toString()}`, fetcher);
+
+  const handleUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await api.upload('/documents/upload', files[i]);
+      }
+      toast.success(`${files.length} arquivo(s) enviado(s) com sucesso`);
+      mutate();
+    } catch (err) {
+      toast.error((err as Error).message || 'Erro ao enviar arquivo');
+    } finally {
+      setUploading(false);
     }
-  }, []);
+  }, [mutate]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    setDragOver(false);
+    handleUpload(e.dataTransfer.files);
+  }, [handleUpload]);
+
+  const handleDownload = async (docId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setDragActive(false);
-    // Handle file upload - would connect to MinIO via Platform API
-  }, []);
+    try {
+      const { url } = await api.get<{ url: string }>(`/documents/${docId}/download`);
+      window.open(url, '_blank');
+    } catch (err) {
+      toast.error('Erro ao baixar arquivo');
+    }
+  };
 
   return (
-    <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 className="page-header__title">Documentos</h1>
-          <p className="page-header__subtitle">
-            Gerencie documentos, pastas e versões da sua organização.
+    <AuthenticatedLayout>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">Documentos</h1>
+            <p className="text-sm text-gray-500 mt-1">Gerencie seus documentos e arquivos</p>
+          </div>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
+            <Upload size={14} />
+            {uploading ? 'Enviando...' : 'Upload'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={(e) => handleUpload(e.target.files)}
+            className="hidden"
+          />
+        </div>
+
+        {/* Search & View Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Buscar documentos..."
+              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <button onClick={() => setViewMode('list')} className={`p-2 ${viewMode === 'list' ? 'bg-blue-50 text-blue-500' : 'text-gray-400'}`}>
+              <List size={16} />
+            </button>
+            <button onClick={() => setViewMode('grid')} className={`p-2 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-500' : 'text-gray-400'}`}>
+              <Grid size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Drop Zone */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+            dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'
+          }`}
+        >
+          <Upload size={32} className={`mx-auto mb-2 ${dragOver ? 'text-blue-500' : 'text-gray-300'}`} />
+          <p className="text-sm text-gray-500">
+            Arraste e solte arquivos aqui ou{' '}
+            <button onClick={() => fileInputRef.current?.click()} className="text-blue-500 hover:text-blue-700 underline">
+              selecione do computador
+            </button>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="topbar__new-request-btn" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-soft)' }}>
-            <Plus size={16} />
-            Nova Pasta
-          </button>
-          <button className="topbar__new-request-btn">
-            <Upload size={16} />
-            Upload
-          </button>
-        </div>
-      </div>
 
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, color: 'var(--color-text-muted)' }}>
-        <FolderOpen size={16} />
-        <span style={{ color: 'var(--color-text-link)', cursor: 'pointer' }}>Raiz</span>
-        <ChevronRight size={14} />
-        <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>Todos os Documentos</span>
-      </div>
+        {isLoading && <LoadingSpinner message="Carregando documentos..." />}
+        {error && <ErrorState message={error.message} />}
 
-      {/* Upload Zone */}
-      <div
-        className={`upload-zone ${dragActive ? 'upload-zone--active' : ''}`}
-        style={{ marginBottom: 20 }}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-      >
-        <div className="upload-zone__icon">
-          <Upload size={32} />
-        </div>
-        <div className="upload-zone__text">
-          Arraste e solte arquivos aqui para fazer upload
-        </div>
-        <div className="upload-zone__hint">
-          ou clique para selecionar arquivos do seu computador
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="filters-bar">
-        <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
-          <Search
-            size={14}
-            style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }}
+        {data && data.items.length === 0 && (
+          <EmptyState
+            icon={<FolderOpen size={48} />}
+            title="Nenhum documento encontrado"
+            description="Faça upload de documentos para começar"
           />
-          <input
-            type="text"
-            className="filter-search"
-            placeholder="Buscar documentos..."
-            style={{ paddingLeft: 32, width: '100%' }}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <button
-            className="topbar__action-btn"
-            onClick={() => setViewMode('list')}
-            style={{ background: viewMode === 'list' ? 'var(--color-surface-hover)' : undefined }}
-          >
-            <List size={18} />
-          </button>
-          <button
-            className="topbar__action-btn"
-            onClick={() => setViewMode('grid')}
-            style={{ background: viewMode === 'grid' ? 'var(--color-surface-hover)' : undefined }}
-          >
-            <Grid size={18} />
-          </button>
-        </div>
-      </div>
+        )}
 
-      {/* Document List */}
-      <div className="card">
-        {viewMode === 'list' ? (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Tamanho</th>
-                <th>Versão</th>
-                <th>Modificado por</th>
-                <th>Última modificação</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDocs.map((doc) => (
-                <tr key={doc.id} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {getFileIcon(doc.type)}
-                      <span style={{ fontWeight: 500 }}>{doc.name}</span>
-                      {doc.type === 'folder' && (
-                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                          ({doc.items} itens)
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    {doc.size || '—'}
-                  </td>
-                  <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    {doc.version ? `v${doc.version}` : '—'}
-                  </td>
-                  <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    {doc.modifiedBy || '—'}
-                  </td>
-                  <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    {doc.modifiedAt}
-                  </td>
-                  <td>
-                    <button className="topbar__action-btn">
-                      <MoreVertical size={16} />
-                    </button>
-                  </td>
+        {data && data.items.length > 0 && viewMode === 'list' && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Nome</th>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Tamanho</th>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Versão</th>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Criado por</th>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Data</th>
+                  <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="card__body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
-              {filteredDocs.map((doc) => (
-                <div
-                  key={doc.id}
-                  style={{
-                    padding: 16,
-                    border: '1px solid var(--color-border-soft)',
-                    borderRadius: 'var(--radius-lg)',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all var(--transition-fast)',
-                  }}
-                >
-                  <div style={{ marginBottom: 12 }}>{getFileIcon(doc.type)}</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {doc.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    {doc.size || `${doc.items} itens`}
-                  </div>
-                </div>
-              ))}
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.items.map((doc) => (
+                  <tr key={doc.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/documents/${doc.id}`)}>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span>{getFileIcon(doc.mimeType)}</span>
+                        <span className="text-sm font-medium text-gray-800">{doc.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-600">{formatFileSize(doc.size)}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600">v{doc.currentVersion}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600">{doc.createdBy?.displayName || '—'}</td>
+                    <td className="px-5 py-3 text-sm text-gray-500">{new Date(doc.updatedAt).toLocaleDateString('pt-BR')}</td>
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); router.push(`/documents/${doc.id}`); }} className="p-1.5 text-gray-400 hover:text-blue-500 rounded">
+                          <Eye size={14} />
+                        </button>
+                        <button onClick={(e) => handleDownload(doc.id, e)} className="p-1.5 text-gray-400 hover:text-green-500 rounded">
+                          <Download size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {data && data.items.length > 0 && viewMode === 'grid' && (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {data.items.map((doc) => (
+              <div
+                key={doc.id}
+                onClick={() => router.push(`/documents/${doc.id}`)}
+                className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-gray-200 cursor-pointer transition-all text-center"
+              >
+                <div className="text-3xl mb-2">{getFileIcon(doc.mimeType)}</div>
+                <p className="text-xs font-medium text-gray-800 truncate">{doc.name}</p>
+                <p className="text-xs text-gray-400 mt-1">{formatFileSize(doc.size)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-gray-500">{data.total} documentos</p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="px-3 py-1 text-sm border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Anterior</button>
+              <span className="px-3 py-1 text-sm text-gray-600">{page} / {data.totalPages}</span>
+              <button onClick={() => setPage(Math.min(data.totalPages, page + 1))} disabled={page === data.totalPages} className="px-3 py-1 text-sm border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Próximo</button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }
