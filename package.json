@@ -1,0 +1,30 @@
+{
+  "name": "workestra",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:portal": "npm run dev -w apps/portal-web",
+    "dev:api": "npm run dev -w apps/platform-api",
+    "dev:worker": "npm run dev -w apps/platform-worker",
+    "build": "npm run build --workspaces --if-present",
+    "build:portal": "npm run build -w apps/portal-web",
+    "build:api": "npm run build -w apps/platform-api",
+    "build:worker": "npm run build -w apps/platform-worker",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
