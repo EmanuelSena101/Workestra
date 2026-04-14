@@ -313,6 +313,7 @@ model PushSubscription {
 model KanbanBoard {
   id                   String   @id @default(uuid())
   name                 String
+  description          String?
   processDefinitionId  String?  @unique @map("process_definition_id")
   processDefinition    ProcessDefinition? @relation(fields: [processDefinitionId], references: [id])
   createdAt            DateTime @default(now()) @map("created_at")
@@ -327,7 +328,7 @@ model KanbanColumn {
   id       String   @id @default(uuid())
   boardId  String   @map("board_id")
   board    KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  title    String
+  name     String
   position Int
   color    String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -422,6 +423,7 @@ model HistoryEntry {
 model Portal {
   id          String   @id @default(uuid())
   name        String
+  slug        String?
   description String?
   status      String   @default("draft") // draft, published
   createdAt   DateTime @default(now()) @map("created_at")

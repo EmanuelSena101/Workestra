@@ -6,7 +6,17 @@ export class AuditService {
   constructor(private prisma: PrismaService) {}
 
   async log(data: { action: string; entityType: string; entityId: string; userId: string; userName: string; details?: Record<string, unknown>; ipAddress?: string }) {
-    return this.prisma.auditEntry.create({ data });
+    return this.prisma.auditEntry.create({
+      data: {
+        action: data.action,
+        entityType: data.entityType,
+        entityId: data.entityId,
+        userId: data.userId,
+        userName: data.userName,
+        details: data.details as any ?? undefined,
+        ipAddress: data.ipAddress,
+      },
+    });
   }
 
   async findAll(filters: { entityType?: string; entityId?: string; userId?: string; page?: number; pageSize?: number }) {

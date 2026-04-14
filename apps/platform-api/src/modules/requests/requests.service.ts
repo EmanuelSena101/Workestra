@@ -78,7 +78,7 @@ export class RequestsService {
         requesterId: data.requesterId,
         priority: data.priority || 'medium',
         status: 'open',
-        formData: data.formData || {},
+        formData: data.formData as any ?? undefined,
       },
       include: {
         requester: { select: { id: true, displayName: true } },
@@ -112,7 +112,10 @@ export class RequestsService {
     const updated = await this.prisma.request.update({
       where: { id },
       data: {
-        ...data,
+        status: data.status,
+        priority: data.priority,
+        currentStep: data.currentStep,
+        formData: data.formData as any ?? undefined,
         completedAt: data.status === 'completed' ? new Date() : undefined,
       },
     });

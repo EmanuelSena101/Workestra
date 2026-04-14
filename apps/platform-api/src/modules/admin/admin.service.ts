@@ -39,13 +39,15 @@ export class AdminService {
   async getSystemStatus() {
     const dbConnected = await this.checkDb();
     return {
-      database: dbConnected ? 'connected' : 'disconnected',
-      ldap: process.env.LDAP_URL ? 'configured' : 'not_configured',
-      minio: process.env.MINIO_ENDPOINT ? 'configured' : 'not_configured',
-      opensearch: process.env.OPENSEARCH_URL ? 'configured' : 'not_configured',
-      tika: process.env.TIKA_URL ? 'configured' : 'not_configured',
-      zeebe: process.env.ZEEBE_ADDRESS ? 'configured' : 'not_configured',
-      vapid: process.env.VAPID_PUBLIC_KEY ? 'configured' : 'not_configured',
+      services: [
+        { name: 'Database', status: dbConnected ? 'connected' : 'disconnected', message: dbConnected ? 'PostgreSQL connected' : 'Cannot reach database' },
+        { name: 'LDAP', status: process.env.LDAP_URL ? 'configured' : 'not_configured', message: process.env.LDAP_URL ? 'LDAP configured' : 'LDAP not configured' },
+        { name: 'MinIO', status: process.env.MINIO_ENDPOINT ? 'configured' : 'not_configured', message: process.env.MINIO_ENDPOINT ? 'MinIO configured' : 'MinIO not configured' },
+        { name: 'OpenSearch', status: process.env.OPENSEARCH_URL ? 'configured' : 'not_configured', message: process.env.OPENSEARCH_URL ? 'OpenSearch configured' : 'OpenSearch not configured' },
+        { name: 'Tika', status: process.env.TIKA_URL ? 'configured' : 'not_configured', message: process.env.TIKA_URL ? 'Tika configured' : 'Tika not configured' },
+        { name: 'Zeebe', status: process.env.ZEEBE_ADDRESS ? 'configured' : 'not_configured', message: process.env.ZEEBE_ADDRESS ? 'Zeebe configured' : 'Zeebe not configured' },
+        { name: 'Push (VAPID)', status: process.env.VAPID_PUBLIC_KEY ? 'configured' : 'not_configured', message: process.env.VAPID_PUBLIC_KEY ? 'VAPID keys configured' : 'VAPID keys not configured' },
+      ],
     };
   }
 

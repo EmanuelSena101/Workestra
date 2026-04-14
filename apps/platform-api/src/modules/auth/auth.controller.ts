@@ -35,8 +35,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser('id') userId: string) {
-    const user = await this.authService.getMe(userId);
-    return { user };
+    return this.authService.getMe(userId);
   }
 
   @Post('ldap/sync')

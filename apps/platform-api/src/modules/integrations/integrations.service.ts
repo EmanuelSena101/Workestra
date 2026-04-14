@@ -22,16 +22,16 @@ export class IntegrationsService {
     return integration;
   }
 
-  async create(data: { name: string; type: string; provider: string; config: unknown; enabled?: boolean }) {
+  async create(data: { name: string; type: string; config: unknown; active?: boolean }) {
     return this.prisma.integrationConfig.create({
-      data: { ...data, config: data.config as any, enabled: data.enabled ?? true },
+      data: { name: data.name, type: data.type, config: data.config as any, active: data.active ?? true },
     });
   }
 
-  async update(id: string, data: { name?: string; config?: unknown; enabled?: boolean }) {
+  async update(id: string, data: { name?: string; config?: unknown; active?: boolean }) {
     return this.prisma.integrationConfig.update({
       where: { id },
-      data: { ...data, config: data.config as any },
+      data: { name: data.name, config: data.config as any, active: data.active },
     });
   }
 
@@ -46,13 +46,13 @@ export class IntegrationsService {
 
     const config = integration.config as Record<string, unknown>;
 
-    switch (integration.provider) {
+    switch (integration.type) {
       case 'mattermost':
         return this.testMattermost(config);
       case 'google_chat':
         return this.testGoogleChat(config);
       default:
-        return { success: false, message: `Provider '${integration.provider}' test not implemented. Configure credentials via env vars.` };
+        return { success: false, message: `Provider '${integration.type}' test not implemented. Configure credentials via env vars.` };
     }
   }
 
